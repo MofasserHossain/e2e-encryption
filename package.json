@@ -1,24 +1,102 @@
 {
-  "name": "e2e-encryption",
+  "name": "next-husky-commitlint-eslint-prettier-boilerplate",
+  "description": "A modern, production-ready Next.js 15 boilerplate with a complete development workflow setup. Includes Husky for Git hooks, Commitlint for conventional commits, ESLint for code quality, Prettier for formatting, shadcn/ui for components, Tailwind CSS for styling, and TypeScript for type safety. Perfect for teams and solo developers who want a professional, scalable foundation.",
+  "keywords": [
+    "nextjs",
+    "next.js",
+    "boilerplate",
+    "template",
+    "husky",
+    "commitlint",
+    "eslint",
+    "prettier",
+    "shadcn",
+    "shadcn/ui",
+    "typescript",
+    "tailwindcss",
+    "tailwind",
+    "react",
+    "workflow",
+    "git-hooks",
+    "conventional-commits"
+  ],
+  "author": {
+    "name": "Mofasser Hossain",
+    "url": "https://github.com/MofasserHossain"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MofasserHossain/next-husky-commitlint-eslint-prettier-boilerplate"
+  },
+  "homepage": "https://github.com/MofasserHossain/next-husky-commitlint-eslint-prettier-boilerplate",
+  "bugs": {
+    "url": "https://github.com/MofasserHossain/next-husky-commitlint-eslint-prettier-boilerplate/issues"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/MofasserHossain"
+  },
+  "files": [
+    "src/**/*",
+    "public/**/*",
+    "scripts/**/*",
+    ".husky/**/*",
+    "*.config.*",
+    "*.json",
+    "*.md",
+    "*.ts",
+    "*.js"
+  ],
+  "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20.11.1"
+  },
   "scripts": {
-    "build": "turbo run build",
-    "dev": "turbo run dev",
-    "lint": "turbo run lint",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-    "check-types": "turbo run check-types"
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "lint:fix": "next lint --fix",
+    "format": "prettier . --write",
+    "format:check": "prettier . --check",
+    "lint:staged": "lint-staged",
+    "commit": "node scripts/commit.mjs",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@radix-ui/react-dropdown-menu": "^2.1.15",
+    "@radix-ui/react-slot": "^1.2.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.5",
+    "lucide-react": "^0.539.0",
+    "next": "15.4.6",
+    "next-themes": "^0.4.6",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "tailwind-merge": "^3.3.1"
   },
   "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "@commitlint/types": "^19.8.1",
+    "@eslint/eslintrc": "^3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.20",
+    "conventional-changelog-atom": "^5.0.0",
+    "eslint": "^9",
+    "eslint-config-next": "15.4.6",
+    "eslint-config-prettier": "^10.1.8",
+    "postcss": "^8.4.49",
     "prettier": "^3.6.2",
-    "turbo": "^2.5.6",
-    "typescript": "5.9.2"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "packageManager": "yarn@1.22.22",
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ]
+    "prettier-plugin-tailwindcss": "^0.6.14",
+    "tailwindcss": "^3.4.17",
+    "tailwindcss-animate": "^1.0.7",
+    "typescript": "^5.4.0"
+  }
 }
