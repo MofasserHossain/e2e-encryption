@@ -2,6 +2,11 @@ import { verifyToken } from '@/lib/jwt'
 import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 
+// Type declaration for global io instance
+declare global {
+  var io: any
+}
+
 // GET /api/conversations/[id]/messages - Get messages for a conversation
 export async function GET(
   request: NextRequest,
@@ -136,24 +141,23 @@ export async function POST(
       data: { updatedAt: new Date() },
     })
 
-    // Emit WebSocket event to other users in the conversation
-    try {
-      // @ts-ignore - global.io is available from server.js
-      if (global.io) {
-        // @ts-ignore
-        global.io
-          .to(`conversation:${conversationId}`)
-          .emit('message:received', {
-            ...message,
-            conversationId: conversationId,
-          })
-        console.log(
-          `WebSocket event emitted for message in conversation: ${conversationId}`,
-        )
+    // Emit WebSocket events using global io instance
+    if (global.io) {
+      const chatMessage = {
+        ...message,
+        createdAt: message.createdAt.toISOString(),
       }
-    } catch (wsError) {
-      console.error('Failed to emit WebSocket event:', wsError)
-      // Don't fail the request if WebSocket fails
+
+      // Emit the new message to OTHER users in the conversation (excluding sender)
+      // This ensures the sender doesn't receive their own message via WebSocket
+      global.io
+        .to(`conversation:${conversationId}`)
+        .emit('message:received', chatMessage)
+
+      // Emit conversation update to refresh conversation list for all participants
+      global.io
+        .to(`conversation:${conversationId}`)
+        .emit('conversation:updated', conversationId, chatMessage)
     }
 
     return NextResponse.json(message, { status: 201 })

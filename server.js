@@ -130,6 +130,7 @@ app.prepare().then(() => {
         socket.emit('auth:error', 'Not authenticated')
         return
       }
+      // Emit to other users in the room (excluding sender)
       socket
         .to(`conversation:${conversationId}`)
         .emit(
@@ -145,28 +146,10 @@ app.prepare().then(() => {
         socket.emit('auth:error', 'Not authenticated')
         return
       }
+      // Emit to other users in the room (excluding sender)
       socket
         .to(`conversation:${conversationId}`)
         .emit('user:stopped_typing', conversationId, socket.userData.userId)
-    })
-
-    // Handle new messages - broadcast to other users in conversation
-    socket.on('message:new', (messageData) => {
-      if (!socket.userData?.userId) {
-        socket.emit('auth:error', 'Not authenticated')
-        return
-      }
-
-      const { conversationId, message } = messageData
-      console.log(
-        `User ${socket.userData.username} sent message in conversation: ${conversationId}`,
-      )
-
-      // Broadcast message to other users in the conversation
-      socket.to(`conversation:${conversationId}`).emit('message:received', {
-        ...message,
-        conversationId: conversationId,
-      })
     })
 
     // Handle disconnection

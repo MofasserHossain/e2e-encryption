@@ -64,16 +64,19 @@ export default function ChatPage() {
       console.log('Joined conversation room:', selectedConversation.id)
     }
 
-    // Listen for new messages
+    // Listen for new messages from OTHER users only
     socket.on('message:received', (message: ChatMessage) => {
-      console.log('New message received:', message)
+      console.log('New message received from other user:', message)
 
-      // Add message to current conversation if it matches
-      if (message.conversationId === selectedConversation?.id) {
+      // Only add message if it's from another user in the current conversation
+      if (
+        message.conversationId === selectedConversation?.id &&
+        message.senderId !== user?.id
+      ) {
         setMessages((prev) => [...prev, message])
       }
 
-      // Update conversation list with new message
+      // Update conversation list with new message (for all users)
       setConversations((prev) =>
         prev.map((conv) => {
           if (conv.id === message.conversationId) {
@@ -87,6 +90,27 @@ export default function ChatPage() {
         }),
       )
     })
+
+    // Listen for conversation updates
+    socket.on(
+      'conversation:updated',
+      (conversationId: string, lastMessage: ChatMessage) => {
+        console.log('Conversation updated:', conversationId, lastMessage)
+        // Update conversation list with new message
+        setConversations((prev) =>
+          prev.map((conv) => {
+            if (conv.id === conversationId) {
+              return {
+                ...conv,
+                messages: [lastMessage, ...(conv.messages || [])],
+                updatedAt: lastMessage.createdAt,
+              }
+            }
+            return conv
+          }),
+        )
+      },
+    )
 
     // Listen for typing indicators
     socket.on(
@@ -129,6 +153,7 @@ export default function ChatPage() {
     // Cleanup event listeners
     return () => {
       socket.off('message:received')
+      socket.off('conversation:updated')
       socket.off('user:typing')
       socket.off('user:stopped_typing')
 
@@ -199,6 +224,17 @@ export default function ChatPage() {
       fetchConversations()
     }
   }, [user])
+
+  // Join conversation rooms when conversations are loaded (only once)
+  useEffect(() => {
+    if (socket && isAuthenticated && conversations.length > 0) {
+      // Join all conversation rooms (this will be called once when conversations are loaded)
+      conversations.forEach((conversation) => {
+        socket.emit('join:conversation', conversation.id)
+        console.log('Joined conversation room:', conversation.id)
+      })
+    }
+  }, [socket, isAuthenticated, conversations.length > 0]) // Only depend on conversations.length > 0
 
   useEffect(() => {
     if (selectedConversation) {
@@ -280,6 +316,13 @@ export default function ChatPage() {
         setIsSearchOpen(false)
         setSearchQuery('')
         setSearchResults([])
+
+        // Join the conversation room immediately
+        if (socket && isAuthenticated) {
+          socket.emit('join:conversation', conversation.id)
+          console.log('Joined new conversation room:', conversation.id)
+        }
+
         focusMessageInput() // Focus input when starting new conversation
       }
     } catch (error) {
@@ -320,7 +363,8 @@ export default function ChatPage() {
       if (response.ok) {
         const message = await response.json()
 
-        // Immediately add message to current conversation for instant feedback
+        // Add message to current conversation immediately for instant feedback
+        // This message is from the current user, so we add it locally
         setMessages((prev) => [...prev, message])
 
         // Update conversation list with new message
@@ -366,6 +410,12 @@ export default function ChatPage() {
     setSelectedConversation(conversation)
     setMessages([]) // Clear messages while loading
     setTypingUsers(new Set()) // Clear typing indicators
+
+    // Ensure we're in the conversation room
+    if (socket && isAuthenticated) {
+      socket.emit('join:conversation', conversation.id)
+      console.log('Joined conversation room:', conversation.id)
+    }
   }
 
   if (!user) {
