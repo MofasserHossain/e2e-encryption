@@ -1,6 +1,5 @@
 'use client'
 
-import { SiteLogo } from '@/components/layout/site-logo'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -21,9 +20,7 @@ export default function Error({
 }) {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-      <div className="mb-8">
-        <SiteLogo />
-      </div>
+     
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
