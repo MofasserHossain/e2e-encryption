@@ -65,10 +65,10 @@ export default function SigninPage() {
       }
 
       const result = await response.json()
-      
+
       // Login the user and wait for it to complete
       await login(result.user)
-      
+
       // Only redirect after successful login
       router.push('/chat')
     } catch (error) {
@@ -138,7 +138,10 @@ export default function SigninPage() {
 
               <div className="text-center text-sm">
                 Don't have an account?{' '}
-                <Link href="/auth/signup" className="text-blue-600 hover:underline">
+                <Link
+                  href="/auth/signup"
+                  className="text-blue-600 hover:underline"
+                >
                   Sign up
                 </Link>
               </div>

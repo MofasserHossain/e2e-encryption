@@ -13,8 +13,11 @@ export interface JWTPayload {
 // Note: This is a basic implementation. For production, consider using jose library
 export function verifyTokenEdge(token: string): JWTPayload | null {
   try {
-    console.log('Edge Runtime: Starting JWT verification for token length:', token.length)
-    
+    console.log(
+      'Edge Runtime: Starting JWT verification for token length:',
+      token.length,
+    )
+
     // Split the JWT token
     const parts = token.split('.')
     if (parts.length !== 3) {
@@ -25,7 +28,7 @@ export function verifyTokenEdge(token: string): JWTPayload | null {
     // Decode the payload (second part)
     const payload = JSON.parse(atob(parts[1]))
     console.log('Edge Runtime: Decoded payload:', payload)
-    
+
     // Check if token is expired
     if (payload.exp && Date.now() >= payload.exp * 1000) {
       console.log('Edge Runtime: JWT token expired')
@@ -34,8 +37,11 @@ export function verifyTokenEdge(token: string): JWTPayload | null {
 
     // For now, we'll trust the token without signature verification in Edge Runtime
     // In production, you should implement proper signature verification or use jose library
-    console.log('Edge Runtime: JWT token verified successfully for user:', payload.userId)
-    
+    console.log(
+      'Edge Runtime: JWT token verified successfully for user:',
+      payload.userId,
+    )
+
     return {
       userId: payload.userId,
       email: payload.email,

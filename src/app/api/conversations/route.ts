@@ -20,7 +20,10 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get('userId')
 
     if (!userId) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'User ID is required' },
+        { status: 400 },
+      )
     }
 
     // Get conversations where the user is a participant
@@ -28,9 +31,9 @@ export async function GET(request: NextRequest) {
       where: {
         participants: {
           some: {
-            userId: userId
-          }
-        }
+            userId: userId,
+          },
+        },
       },
       include: {
         participants: {
@@ -39,14 +42,14 @@ export async function GET(request: NextRequest) {
               select: {
                 id: true,
                 name: true,
-                username: true
-              }
-            }
-          }
+                username: true,
+              },
+            },
+          },
         },
         messages: {
           orderBy: {
-            createdAt: 'desc'
+            createdAt: 'desc',
           },
           take: 1,
           include: {
@@ -54,15 +57,15 @@ export async function GET(request: NextRequest) {
               select: {
                 id: true,
                 name: true,
-                username: true
-              }
-            }
-          }
-        }
+                username: true,
+              },
+            },
+          },
+        },
       },
       orderBy: {
-        updatedAt: 'desc'
-      }
+        updatedAt: 'desc',
+      },
     })
 
     return NextResponse.json(conversations)
@@ -70,7 +73,7 @@ export async function GET(request: NextRequest) {
     console.error('Error fetching conversations:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
@@ -95,7 +98,7 @@ export async function POST(request: NextRequest) {
     if (!userId || !otherUserId) {
       return NextResponse.json(
         { error: 'User ID and other user ID are required' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
@@ -105,10 +108,10 @@ export async function POST(request: NextRequest) {
         participants: {
           every: {
             userId: {
-              in: [userId, otherUserId]
-            }
-          }
-        }
+              in: [userId, otherUserId],
+            },
+          },
+        },
       },
       include: {
         participants: {
@@ -117,14 +120,14 @@ export async function POST(request: NextRequest) {
               select: {
                 id: true,
                 name: true,
-                username: true
-              }
-            }
-          }
+                username: true,
+              },
+            },
+          },
         },
         messages: {
           orderBy: {
-            createdAt: 'desc'
+            createdAt: 'desc',
           },
           take: 1,
           include: {
@@ -132,12 +135,12 @@ export async function POST(request: NextRequest) {
               select: {
                 id: true,
                 name: true,
-                username: true
-              }
-            }
-          }
-        }
-      }
+                username: true,
+              },
+            },
+          },
+        },
+      },
     })
 
     if (existingConversation) {
@@ -148,11 +151,8 @@ export async function POST(request: NextRequest) {
     const conversation = await prisma.conversation.create({
       data: {
         participants: {
-          create: [
-            { userId: userId },
-            { userId: otherUserId }
-          ]
-        }
+          create: [{ userId: userId }, { userId: otherUserId }],
+        },
       },
       include: {
         participants: {
@@ -161,10 +161,10 @@ export async function POST(request: NextRequest) {
               select: {
                 id: true,
                 name: true,
-                username: true
-              }
-            }
-          }
+                username: true,
+              },
+            },
+          },
         },
         messages: {
           include: {
@@ -172,12 +172,12 @@ export async function POST(request: NextRequest) {
               select: {
                 id: true,
                 name: true,
-                username: true
-              }
-            }
-          }
-        }
-      }
+                username: true,
+              },
+            },
+          },
+        },
+      },
     })
 
     return NextResponse.json(conversation, { status: 201 })
@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
     console.error('Error creating conversation:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

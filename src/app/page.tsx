@@ -11,12 +11,11 @@ export default function HomePage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
 
-
   useEffect(() => {
     if (user && !isLoading) {
       router.push('/chat')
     }
-  }, [user,  isLoading])
+  }, [user, isLoading])
 
   if (isLoading) {
     return <div>Loading...</div>
@@ -26,7 +25,9 @@ export default function HomePage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-gray-900">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold">Welcome to Chat App</CardTitle>
+          <CardTitle className="text-3xl font-bold">
+            Welcome to Chat App
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-center text-gray-600 dark:text-gray-400">

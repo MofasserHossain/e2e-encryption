@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     if (!query || !currentUserId) {
       return NextResponse.json(
         { error: 'Query and current user ID are required' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
@@ -34,18 +34,18 @@ export async function GET(request: NextRequest) {
           {
             OR: [
               { name: { contains: query, mode: 'insensitive' } },
-              { username: { contains: query, mode: 'insensitive' } }
-            ]
+              { username: { contains: query, mode: 'insensitive' } },
+            ],
           },
-          { id: { not: currentUserId } }
-        ]
+          { id: { not: currentUserId } },
+        ],
       },
       select: {
         id: true,
         name: true,
-        username: true
+        username: true,
       },
-      take: 10
+      take: 10,
     })
 
     return NextResponse.json(users)
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     console.error('Error searching users:', error)
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

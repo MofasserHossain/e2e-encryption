@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 // GET /api/conversations/[id]/messages - Get messages for a conversation
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const token = request.cookies.get('auth-token')?.value
@@ -23,7 +23,10 @@ export async function GET(
     const userId = searchParams.get('userId')
 
     if (!userId) {
-      return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'User ID is required' },
+        { status: 400 },
+      )
     }
 
     const { id: conversationId } = await params
@@ -32,8 +35,8 @@ export async function GET(
     const participant = await prisma.userConversation.findFirst({
       where: {
         userId: userId,
-        conversationId: conversationId
-      }
+        conversationId: conversationId,
+      },
     })
 
     if (!participant) {
@@ -43,27 +46,27 @@ export async function GET(
     // Get messages for the conversation
     const messages = await prisma.message.findMany({
       where: {
-        conversationId: conversationId
+        conversationId: conversationId,
       },
       include: {
         sender: {
           select: {
             id: true,
             name: true,
-            username: true
-          }
-        }
+            username: true,
+          },
+        },
       },
       orderBy: {
-        createdAt: 'asc'
-      }
+        createdAt: 'asc',
+      },
     })
 
     return NextResponse.json(messages)
   } catch (error) {
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }
@@ -71,7 +74,7 @@ export async function GET(
 // POST /api/conversations/[id]/messages - Send a new message
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const token = request.cookies.get('auth-token')?.value
@@ -91,7 +94,7 @@ export async function POST(
     if (!content || !senderId) {
       return NextResponse.json(
         { error: 'Content and sender ID are required' },
-        { status: 400 }
+        { status: 400 },
       )
     }
 
@@ -101,8 +104,8 @@ export async function POST(
     const participant = await prisma.userConversation.findFirst({
       where: {
         userId: senderId,
-        conversationId: conversationId
-      }
+        conversationId: conversationId,
+      },
     })
 
     if (!participant) {
@@ -114,30 +117,50 @@ export async function POST(
       data: {
         content: content,
         senderId: senderId,
-        conversationId: conversationId
+        conversationId: conversationId,
       },
       include: {
         sender: {
           select: {
             id: true,
             name: true,
-            username: true
-          }
-        }
-      }
+            username: true,
+          },
+        },
+      },
     })
 
     // Update conversation's updatedAt timestamp
     await prisma.conversation.update({
       where: { id: conversationId },
-      data: { updatedAt: new Date() }
+      data: { updatedAt: new Date() },
     })
+
+    // Emit WebSocket event to other users in the conversation
+    try {
+      // @ts-ignore - global.io is available from server.js
+      if (global.io) {
+        // @ts-ignore
+        global.io
+          .to(`conversation:${conversationId}`)
+          .emit('message:received', {
+            ...message,
+            conversationId: conversationId,
+          })
+        console.log(
+          `WebSocket event emitted for message in conversation: ${conversationId}`,
+        )
+      }
+    } catch (wsError) {
+      console.error('Failed to emit WebSocket event:', wsError)
+      // Don't fail the request if WebSocket fails
+    }
 
     return NextResponse.json(message, { status: 201 })
   } catch (error) {
     return NextResponse.json(
       { error: 'Internal server error' },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

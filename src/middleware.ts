@@ -6,7 +6,7 @@ export function middleware(request: NextRequest) {
 
   // Public routes that don't require authentication
   const publicRoutes = ['/auth/signin', '/auth/signup', '/']
-  
+
   // Check if the current route is public
   if (publicRoutes.includes(pathname)) {
     console.log(`Middleware: Public route ${pathname}, allowing access`)
@@ -15,9 +15,14 @@ export function middleware(request: NextRequest) {
 
   // Get the JWT token from cookies
   const token = request.cookies.get('auth-token')?.value
-  console.log(`Middleware: Checking route ${pathname}, token present: ${!!token}`)
+  console.log(
+    `Middleware: Checking route ${pathname}, token present: ${!!token}`,
+  )
   console.log(`Middleware: All cookies:`, request.cookies.getAll())
-  console.log(`Middleware: auth-token cookie:`, request.cookies.get('auth-token'))
+  console.log(
+    `Middleware: auth-token cookie:`,
+    request.cookies.get('auth-token'),
+  )
 
   if (!token) {
     console.log(`Middleware: No token found, redirecting to signin`)
@@ -27,8 +32,11 @@ export function middleware(request: NextRequest) {
 
   // Verify the token using Edge Runtime compatible function
   const payload = verifyTokenEdge(token)
-  console.log(`Middleware: Token verification result:`, payload ? 'valid' : 'invalid')
-  
+  console.log(
+    `Middleware: Token verification result:`,
+    payload ? 'valid' : 'invalid',
+  )
+
   if (!payload) {
     console.log(`Middleware: Invalid token, clearing cookie and redirecting`)
     // Clear invalid token and redirect to signin
@@ -38,7 +46,9 @@ export function middleware(request: NextRequest) {
   }
 
   // Token is valid, allow access
-  console.log(`Middleware: Valid token for user ${payload.userId}, allowing access`)
+  console.log(
+    `Middleware: Valid token for user ${payload.userId}, allowing access`,
+  )
   return NextResponse.next()
 }
 

@@ -64,7 +64,10 @@ export async function POST(request: NextRequest) {
       path: '/', // Ensure cookie is accessible from all paths
     })
 
-    console.log('Login route - cookie set with token:', token.substring(0, 50) + '...')
+    console.log(
+      'Login route - cookie set with token:',
+      token.substring(0, 50) + '...',
+    )
     console.log('Login route - response cookies:', response.cookies.getAll())
     console.log('Login route - response after setting cookie:', response)
 

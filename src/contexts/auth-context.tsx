@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.log('AuthContext: Logging in user:', userData)
       // Set user immediately for immediate UI update
       setUser(userData)
-      
+
       // Verify the auth status to ensure everything is working
       await checkAuthStatus()
     } catch (error) {

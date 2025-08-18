@@ -8,6 +8,9 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { useAuth } from '@/contexts/auth-context'
+import { useSocketConnection } from '@/hooks/use-socket-connection'
+import { cn } from '@/lib/utils'
+import { ChatMessage } from '@/types/websocket'
 import { Loader2, LogOut, Plus, Send } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
@@ -18,20 +21,12 @@ interface User {
   username: string
 }
 
-interface Message {
-  id: string
-  content: string
-  senderId: string
-  createdAt: string
-  sender: User
-}
-
 interface Conversation {
   id: string
   participants: Array<{
     user: User
   }>
-  messages: Message[]
+  messages: ChatMessage[]
   updatedAt: string
 }
 
@@ -43,34 +38,150 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConversation, setSelectedConversation] =
     useState<Conversation | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<User[]>([])
   const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [showScrollButton, setShowScrollButton] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [isLoadingConversation, setIsLoadingConversation] = useState(false)
   const [isLoadingConversations, setIsLoadingConversations] = useState(false)
+  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set())
+  const [isTyping, setIsTyping] = useState(false)
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Initialize WebSocket
+  const { isConnected, isAuthenticated, userData, socket } =
+    useSocketConnection()
+
+  // WebSocket event handlers
+  useEffect(() => {
+    if (!socket || !isAuthenticated) return
+
+    // Join conversation room when conversation is selected
+    if (selectedConversation) {
+      socket.emit('join:conversation', selectedConversation.id)
+      console.log('Joined conversation room:', selectedConversation.id)
+    }
+
+    // Listen for new messages
+    socket.on('message:received', (message: ChatMessage) => {
+      console.log('New message received:', message)
+
+      // Add message to current conversation if it matches
+      if (message.conversationId === selectedConversation?.id) {
+        setMessages((prev) => [...prev, message])
+      }
+
+      // Update conversation list with new message
+      setConversations((prev) =>
+        prev.map((conv) => {
+          if (conv.id === message.conversationId) {
+            return {
+              ...conv,
+              messages: [message, ...(conv.messages || [])],
+              updatedAt: message.createdAt,
+            }
+          }
+          return conv
+        }),
+      )
+    })
+
+    // Listen for typing indicators
+    socket.on(
+      'user:typing',
+      (conversationId: string, userId: string, username: string) => {
+        if (
+          conversationId === selectedConversation?.id &&
+          userId !== user?.id
+        ) {
+          setTypingUsers((prev) => new Set([...prev, username]))
+        }
+      },
+    )
+
+    socket.on(
+      'user:stopped_typing',
+      (conversationId: string, userId: string) => {
+        if (
+          conversationId === selectedConversation?.id &&
+          userId !== user?.id
+        ) {
+          setTypingUsers((prev) => {
+            const newSet = new Set(prev)
+            // Find username by userId from conversations
+            const conversation = conversations.find(
+              (c) => c.id === conversationId,
+            )
+            const participant = conversation?.participants.find(
+              (p) => p.user.id === userId,
+            )
+            if (participant) {
+              newSet.delete(participant.user.username)
+            }
+            return newSet
+          })
+        }
+      },
+    )
+
+    // Cleanup event listeners
+    return () => {
+      socket.off('message:received')
+      socket.off('user:typing')
+      socket.off('user:stopped_typing')
+
+      // Leave conversation room
+      if (selectedConversation) {
+        socket.emit('leave:conversation', selectedConversation.id)
+        console.log('Left conversation room:', selectedConversation.id)
+      }
+    }
+  }, [socket, isAuthenticated, selectedConversation, user?.id, conversations])
+
+  // Handle typing indicator
+  const handleTyping = () => {
+    if (!socket || !selectedConversation || !isAuthenticated) return
+
+    if (!isTyping) {
+      setIsTyping(true)
+      socket.emit('message:typing', selectedConversation.id)
+    }
+
+    // Clear existing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current)
+    }
+
+    // Set timeout to stop typing indicator
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false)
+      socket.emit('message:stop_typing', selectedConversation.id)
+    }, 1000)
+  }
+
+  // Cleanup typing timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const scrollToBottom = () => {
     const messagesContainer = document.querySelector('.messages-container')
     if (messagesContainer) {
       messagesContainer.scrollTo({
         top: messagesContainer.scrollHeight,
-        behavior: 'smooth'
+        behavior: 'smooth',
       })
     }
   }
 
   const focusMessageInput = () => {
     messageInputRef.current?.focus()
-  }
-
-  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget
-    const isScrolledUp = scrollTop < scrollHeight - clientHeight - 100 // Reduced threshold for better responsiveness
-    setShowScrollButton(isScrolledUp)
   }
 
   useEffect(() => {
@@ -100,9 +211,7 @@ export default function ChatPage() {
   const fetchConversations = async () => {
     try {
       setIsLoadingConversations(true)
-      const response = await fetch(
-        `/api/conversations?userId=${user?.id}`,
-      )
+      const response = await fetch(`/api/conversations?userId=${user?.id}`)
       if (response.ok) {
         const data = await response.json()
         setConversations(data)
@@ -181,12 +290,17 @@ export default function ChatPage() {
   }
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !selectedConversation || !user?.id)
-      return
+    if (!newMessage.trim() || !selectedConversation || !user?.id) return
 
     setIsSending(true)
     const messageContent = newMessage.trim()
     setNewMessage('')
+
+    // Stop typing indicator
+    if (isTyping) {
+      setIsTyping(false)
+      socket?.emit('message:stop_typing', selectedConversation.id)
+    }
 
     try {
       const response = await fetch(
@@ -205,8 +319,24 @@ export default function ChatPage() {
 
       if (response.ok) {
         const message = await response.json()
+
+        // Immediately add message to current conversation for instant feedback
         setMessages((prev) => [...prev, message])
-        fetchConversations() // Refresh conversation list to update last message
+
+        // Update conversation list with new message
+        setConversations((prev) =>
+          prev.map((conv) => {
+            if (conv.id === selectedConversation.id) {
+              return {
+                ...conv,
+                messages: [message, ...(conv.messages || [])],
+                updatedAt: message.createdAt,
+              }
+            }
+            return conv
+          }),
+        )
+
         focusMessageInput() // Focus input after sending message
       } else {
         // If sending failed, restore the message
@@ -228,15 +358,14 @@ export default function ChatPage() {
   }
 
   const getOtherParticipant = (conversation: Conversation) => {
-    return conversation.participants.find(
-      (p) => p.user.id !== user?.id,
-    )?.user
+    return conversation.participants.find((p) => p.user.id !== user?.id)?.user
   }
 
   const handleConversationSelect = (conversation: Conversation) => {
     setIsLoadingConversation(true)
     setSelectedConversation(conversation)
     setMessages([]) // Clear messages while loading
+    setTypingUsers(new Set()) // Clear typing indicators
   }
 
   if (!user) {
@@ -292,25 +421,59 @@ export default function ChatPage() {
               </Button>
             </div>
           </div>
+
+          {/* Socket Status Debug */}
+          <div className="mt-3 border-t border-gray-200 pt-3 dark:border-gray-600">
+            <div className="flex items-center justify-between text-xs">
+              {userData ? (
+                <div className="mt-1 text-xs text-gray-500">
+                  User: {userData.username}
+                </div>
+              ) : (
+                <div className="mt-1 text-xs text-gray-500"></div>
+              )}
+              <div className="flex items-center gap-2">
+                <div
+                  className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}
+                ></div>
+                <span
+                  className={isConnected ? 'text-green-600' : 'text-red-600'}
+                >
+                  {isConnected ? 'ON' : 'OFF'}
+                </span>
+              </div>
+            </div>
+            {/* <div className="flex items-center justify-between text-xs mt-1">
+              <span className="text-gray-500">Auth Status:</span>
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+                <span className={isAuthenticated ? 'text-green-600' : 'text-yellow-600'}>
+                  {isAuthenticated ? 'OK' : 'PENDING'}
+                </span>
+              </div>
+            </div> */}
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
           {isLoadingConversations && conversations.length === 0 ? (
-            <div className="flex justify-center items-center py-8">
+            <div className="flex items-center justify-center py-8">
               <div className="flex items-center space-x-2 text-blue-500 dark:text-blue-400">
                 <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-blue-500 dark:bg-blue-500 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-blue-500 dark:bg-blue-500 rounded-full animate-bounce delay-100"></div>
-                  <div className="w-2 h-2 bg-blue-500 dark:bg-blue-500 rounded-full animate-bounce delay-200"></div>
+                  <div className="h-2 w-2 animate-bounce rounded-full bg-blue-500 dark:bg-blue-500"></div>
+                  <div className="h-2 w-2 animate-bounce rounded-full bg-blue-500 delay-100 dark:bg-blue-500"></div>
+                  <div className="h-2 w-2 animate-bounce rounded-full bg-blue-500 delay-200 dark:bg-blue-500"></div>
                 </div>
                 <span className="text-sm">Loading conversations...</span>
               </div>
             </div>
           ) : conversations.length === 0 ? (
-            <div className="flex justify-center items-center py-8">
+            <div className="flex items-center justify-center py-8">
               <div className="text-center text-gray-500 dark:text-gray-400">
                 <p className="text-sm">No conversations yet</p>
-                <p className="text-xs mt-1">Start a new chat to begin messaging</p>
+                <p className="mt-1 text-xs">
+                  Start a new chat to begin messaging
+                </p>
               </div>
             </div>
           ) : (
@@ -336,10 +499,13 @@ export default function ChatPage() {
                     </div>
                     {lastMessage && (
                       <span className="text-xs text-gray-400">
-                        {new Date(lastMessage.createdAt).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        {new Date(lastMessage.createdAt).toLocaleTimeString(
+                          [],
+                          {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          },
+                        )}
                       </span>
                     )}
                   </div>
@@ -357,7 +523,7 @@ export default function ChatPage() {
       </div>
 
       {/* Right Side - Messages */}
-      <div className="flex flex-1 flex-col relative">
+      <div className="relative flex flex-1 flex-col">
         {selectedConversation ? (
           <>
             {/* Chat Header */}
@@ -368,68 +534,108 @@ export default function ChatPage() {
               <p className="text-sm text-gray-500">
                 @{getOtherParticipant(selectedConversation)?.username}
               </p>
+              {/* WebSocket connection and authentication status */}
+              {/* <div className="flex items-center gap-4 mt-2">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="text-xs text-gray-500">
+                    {isConnected ? 'Connected' : 'Disconnected'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${isAuthenticated ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+                  <span className="text-xs text-gray-500">
+                    {isAuthenticated ? 'Authenticated' : 'Not Authenticated'}
+                  </span>
+                </div>
+                {userData && (
+                  <div className="text-xs text-gray-500">
+                    Logged in as: {userData.username}
+                  </div>
+                )}
+              </div> */}
             </div>
 
             {/* Messages */}
-            <div className="messages-container flex-1 space-y-4 overflow-y-auto p-4 flex flex-col-reverse relative" onScroll={handleScroll}>
-              
+            <div className="messages-container relative flex flex-1 flex-col-reverse space-y-4 overflow-y-auto p-4">
               <div className="space-y-4">
                 {/* Loading indicator */}
                 {isLoadingConversation && (
-                  <div className="flex justify-center items-center py-8">
+                  <div className="flex items-center justify-center py-8">
                     <div className="flex items-center space-x-2 text-blue-500 dark:text-blue-400">
                       <div className="flex space-x-1">
-                        <div className="w-2 h-2 bg-blue-500 dark:bg-blue-500 rounded-full animate-bounce"></div>
-                        <div className="w-2 h-2 bg-blue-500 dark:bg-blue-500 rounded-full animate-bounce delay-100"></div>
-                        <div className="w-2 h-2 bg-blue-500 dark:bg-blue-500 rounded-full animate-bounce delay-200"></div>
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-blue-500 dark:bg-blue-500"></div>
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-blue-500 delay-100 dark:bg-blue-500"></div>
+                        <div className="h-2 w-2 animate-bounce rounded-full bg-blue-500 delay-200 dark:bg-blue-500"></div>
                       </div>
                       <span>Loading conversation...</span>
                     </div>
                   </div>
                 )}
-                
-                {!isLoadingConversation && messages.map((message) => (
-                  <div
-                    key={message.id}
-                    className={`flex ${
-                      message.senderId === user?.id
-                        ? 'justify-end'
-                        : 'justify-start'
-                    }`}
-                  >
+
+                {!isLoadingConversation &&
+                  messages.map((message, index) => (
                     <div
-                      className={`max-w-xs rounded-lg px-4 py-2 lg:max-w-md ${
+                      key={message.id + index}
+                      className={cn(
+                        'flex',
                         message.senderId === user?.id
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-gray-100'
-                      }`}
+                          ? 'justify-end'
+                          : 'justify-start',
+                      )}
                     >
-                      <p>{message.content}</p>
-                      <p className="mt-1 text-xs opacity-70">
-                        {new Date(message.createdAt).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </p>
+                      <div
+                        className={`max-w-xs rounded-lg px-4 py-2 lg:max-w-md ${
+                          message.senderId === user?.id
+                            ? 'bg-blue-500 text-white'
+                            : 'bg-gray-200 text-gray-900 dark:bg-gray-700 dark:text-gray-100'
+                        }`}
+                      >
+                        <p>{message.content}</p>
+                        <p className="mt-1 text-xs opacity-70">
+                          {new Date(message.createdAt).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+
+                {/* Typing indicators */}
+                {typingUsers.size > 0 && (
+                  <div className="flex justify-start">
+                    <div className="max-w-xs rounded-lg bg-gray-200 px-4 py-2 text-gray-900 dark:bg-gray-700 dark:text-gray-100 lg:max-w-md">
+                      <div className="flex items-center space-x-2">
+                        <div className="flex space-x-1">
+                          <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-500"></div>
+                          <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-500 delay-100"></div>
+                          <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-gray-500 delay-200"></div>
+                        </div>
+                        <span className="text-xs opacity-70">
+                          {Array.from(typingUsers).join(', ')} typing...
+                        </span>
+                      </div>
                     </div>
                   </div>
-                ))}
-                
+                )}
+
                 {/* Sending indicator */}
                 {isSending && (
                   <div className="flex justify-end">
-                    <div className="max-w-xs rounded-lg px-4 py-2 lg:max-w-md bg-blue-500 text-white opacity-70">
+                    <div className="max-w-xs rounded-lg bg-blue-500 px-4 py-2 text-white opacity-70 lg:max-w-md">
                       <div className="flex items-center space-x-2">
                         <div className="flex space-x-1">
-                        <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce"></div>
-                        <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce delay-100"></div>
-                        <div className="w-1.5 h-1.5 bg-white rounded-full animate-bounce delay-200"></div>
-                      </div>
+                          <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-white"></div>
+                          <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-white delay-100"></div>
+                          <div className="h-1.5 w-1.5 animate-bounce rounded-full bg-white delay-200"></div>
+                        </div>
                         <span className="text-xs opacity-70">Sending...</span>
                       </div>
                     </div>
                   </div>
                 )}
+
                 <div ref={messagesEndRef} />
               </div>
             </div>
@@ -440,8 +646,13 @@ export default function ChatPage() {
                 <Input
                   ref={messageInputRef}
                   value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder={isSending ? "Sending message..." : "Type a message..."}
+                  onChange={(e) => {
+                    setNewMessage(e.target.value)
+                    handleTyping() // Trigger typing indicator
+                  }}
+                  placeholder={
+                    isSending ? 'Sending message...' : 'Type a message...'
+                  }
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault()
@@ -450,9 +661,12 @@ export default function ChatPage() {
                   }}
                   className="flex-1"
                   autoFocus
-                  disabled={isSending }
+                  disabled={isSending}
                 />
-                <Button onClick={sendMessage} disabled={!newMessage.trim() || isSending}>
+                <Button
+                  onClick={sendMessage}
+                  disabled={!newMessage.trim() || isSending}
+                >
                   {isSending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (

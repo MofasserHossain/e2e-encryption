@@ -75,10 +75,10 @@ export default function SignupPage() {
       }
 
       const result = await response.json()
-      
+
       // Login the user and wait for it to complete
       await login(result.user)
-      
+
       // Only redirect after successful login
       router.push('/chat')
     } catch (error) {
@@ -101,7 +101,11 @@ export default function SignupPage() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              className="space-y-4"
+              noValidate
+            >
               <FormField
                 control={form.control}
                 name="name"
@@ -109,10 +113,7 @@ export default function SignupPage() {
                   <FormItem>
                     <FormLabel>Full Name</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="Enter your full name"
-                        {...field}
-                      />
+                      <Input placeholder="Enter your full name" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -126,14 +127,12 @@ export default function SignupPage() {
                   <FormItem>
                     <FormLabel>Username</FormLabel>
                     <FormControl>
-                      <Input
-                        placeholder="Enter your username"
-                        {...field}
-                      />
+                      <Input placeholder="Enter your username" {...field} />
                     </FormControl>
                     <FormMessage />
                     <p className="text-xs text-gray-500">
-                      Username can only contain letters, numbers, and underscores
+                      Username can only contain letters, numbers, and
+                      underscores
                     </p>
                   </FormItem>
                 )}
@@ -185,7 +184,10 @@ export default function SignupPage() {
 
               <div className="text-center text-sm">
                 Already have an account?{' '}
-                <Link href="/auth/signin" className="text-blue-600 hover:underline">
+                <Link
+                  href="/auth/signin"
+                  className="text-blue-600 hover:underline"
+                >
                   Sign in
                 </Link>
               </div>
