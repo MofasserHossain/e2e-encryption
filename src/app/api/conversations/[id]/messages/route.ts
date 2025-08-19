@@ -4,7 +4,13 @@ import { NextRequest, NextResponse } from 'next/server'
 
 // Type declaration for global io instance
 declare global {
-  var io: any
+  var io:
+    | {
+        to: (room: string) => {
+          emit: (event: string, data: unknown) => void
+        }
+      }
+    | undefined
 }
 
 // GET /api/conversations/[id]/messages - Get messages for a conversation
@@ -70,7 +76,10 @@ export async function GET(
     return NextResponse.json(messages)
   } catch (error) {
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 },
     )
   }
@@ -154,16 +163,19 @@ export async function POST(
         .to(`conversation:${conversationId}`)
         .emit('message:received', chatMessage)
 
-      // Emit conversation update to refresh conversation list for all participants
+      // Emit conversation update to refresh conversation list for a  ll participants
       global.io
         .to(`conversation:${conversationId}`)
-        .emit('conversation:updated', conversationId, chatMessage)
+        .emit('conversation:updated', { conversationId, message: chatMessage })
     }
 
     return NextResponse.json(message, { status: 201 })
   } catch (error) {
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 },
     )
   }

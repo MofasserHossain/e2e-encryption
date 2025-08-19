@@ -9,15 +9,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { email, password } = loginSchema.parse(body)
 
-    console.log('Login route - email:', email)
-    console.log('Login route - password:', password)
+    // console.log('Login route - email:', email)
+    // console.log('Login route - password:', password)
 
     // Find user by email
     const user = await prisma.user.findUnique({
       where: { email },
     })
 
-    console.log('Login route - user:', user)
+    // console.log('Login route - user:', user)
 
     if (!user) {
       return NextResponse.json(
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
       username: user.username,
     })
 
-    console.log('Login route - token:', token)
+    // console.log('Login route - token:', token)
     // Return user data (without password)
     const { password: _, ...userWithoutPassword } = user
 
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       user: userWithoutPassword,
     })
 
-    console.log('Login route - response:', response)
+    // console.log('Login route - response:', response)
 
     // Set JWT token in HTTP-only cookie
     response.cookies.set('auth-token', token, {
@@ -64,12 +64,12 @@ export async function POST(request: NextRequest) {
       path: '/', // Ensure cookie is accessible from all paths
     })
 
-    console.log(
-      'Login route - cookie set with token:',
-      token.substring(0, 50) + '...',
-    )
-    console.log('Login route - response cookies:', response.cookies.getAll())
-    console.log('Login route - response after setting cookie:', response)
+    // console.log(
+    //   'Login route - cookie set with token:',
+    //   token.substring(0, 50) + '...',
+    // )
+    // console.log('Login route - response cookies:', response.cookies.getAll())
+    // console.log('Login route - response after setting cookie:', response)
 
     return response
   } catch (error) {

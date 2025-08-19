@@ -15,6 +15,7 @@ export default function HomePage() {
     if (user && !isLoading) {
       router.push('/chat')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, isLoading])
 
   if (isLoading) {

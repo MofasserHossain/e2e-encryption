@@ -7,6 +7,7 @@ import {
   useEffect,
   useState,
 } from 'react'
+import { toast } from 'sonner'
 
 interface User {
   id: string
@@ -36,18 +37,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAuthStatus = async () => {
     try {
-      console.log('AuthContext: Checking auth status...')
+      // console.log('AuthContext: Checking auth status...')
       const response = await fetch('/api/auth/me')
       if (response.ok) {
         const userData = await response.json()
-        console.log('AuthContext: User authenticated:', userData.user)
+        // console.log('AuthContext: User authenticated:', userData.user)
         setUser(userData.user)
       } else {
-        console.log('AuthContext: No valid session found')
+        // console.log('AuthContext: No valid session found')
         setUser(null)
       }
     } catch (error) {
-      console.error('AuthContext: Auth check failed:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
+      toast.error('Error checking auth status:' + errorMessage)
+      // console.error('AuthContext: Auth check failed:', error)
       setUser(null)
     } finally {
       setIsLoading(false)
@@ -56,14 +60,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (userData: User) => {
     try {
-      console.log('AuthContext: Logging in user:', userData)
+      // console.log('AuthContext: Logging in user:', userData)
       // Set user immediately for immediate UI update
       setUser(userData)
 
       // Verify the auth status to ensure everything is working
       await checkAuthStatus()
     } catch (error) {
-      console.error('AuthContext: Login failed:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
+      toast.error('Error logging in:' + errorMessage)
       setUser(null)
       throw error
     }
@@ -74,7 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await fetch('/api/auth/logout', { method: 'POST' })
       setUser(null)
     } catch (error) {
-      console.error('Logout failed:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
+      toast.error('Error logging out:' + errorMessage)
       // Even if the API call fails, clear the local state
       setUser(null)
     }

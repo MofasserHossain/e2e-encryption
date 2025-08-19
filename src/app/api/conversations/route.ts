@@ -70,9 +70,12 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(conversations)
   } catch (error) {
-    console.error('Error fetching conversations:', error)
+    // console.error('Error fetching conversations:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 },
     )
   }
@@ -182,9 +185,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(conversation, { status: 201 })
   } catch (error) {
-    console.error('Error creating conversation:', error)
+    // console.error('Error creating conversation:', error)
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 },
     )
   }

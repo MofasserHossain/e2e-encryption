@@ -14,6 +14,7 @@ import { ChatMessage } from '@/types/websocket'
 import { Loader2, LogOut, Plus, Send } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 
 interface User {
   id: string
@@ -61,12 +62,12 @@ export default function ChatPage() {
     // Join conversation room when conversation is selected
     if (selectedConversation) {
       socket.emit('join:conversation', selectedConversation.id)
-      console.log('Joined conversation room:', selectedConversation.id)
+      // console.log('Joined conversation room:', selectedConversation.id)
     }
 
     // Listen for new messages from OTHER users only
     socket.on('message:received', (message: ChatMessage) => {
-      console.log('New message received from other user:', message)
+      // console.log('New message received from other user:', message)
 
       // Only add message if it's from another user in the current conversation
       if (
@@ -95,7 +96,7 @@ export default function ChatPage() {
     socket.on(
       'conversation:updated',
       (conversationId: string, lastMessage: ChatMessage) => {
-        console.log('Conversation updated:', conversationId, lastMessage)
+        // console.log('Conversation updated:', conversationId, lastMessage)
         // Update conversation list with new message
         setConversations((prev) =>
           prev.map((conv) => {
@@ -160,7 +161,7 @@ export default function ChatPage() {
       // Leave conversation room
       if (selectedConversation) {
         socket.emit('leave:conversation', selectedConversation.id)
-        console.log('Left conversation room:', selectedConversation.id)
+        // console.log('Left conversation room:', selectedConversation.id)
       }
     }
   }, [socket, isAuthenticated, selectedConversation, user?.id, conversations])
@@ -217,12 +218,14 @@ export default function ChatPage() {
     if (!user && !isLoading) {
       router.push('/auth/signin')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading])
 
   useEffect(() => {
     if (user?.id) {
       fetchConversations()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   // Join conversation rooms when conversations are loaded (only once)
@@ -231,9 +234,10 @@ export default function ChatPage() {
       // Join all conversation rooms (this will be called once when conversations are loaded)
       conversations.forEach((conversation) => {
         socket.emit('join:conversation', conversation.id)
-        console.log('Joined conversation room:', conversation.id)
+        // console.log('Joined conversation room:', conversation.id)
       })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, isAuthenticated, conversations.length > 0]) // Only depend on conversations.length > 0
 
   useEffect(() => {
@@ -242,6 +246,7 @@ export default function ChatPage() {
       // Small delay to ensure conversation is loaded before focusing
       setTimeout(() => focusMessageInput(), 100)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConversation])
 
   const fetchConversations = async () => {
@@ -253,7 +258,9 @@ export default function ChatPage() {
         setConversations(data)
       }
     } catch (error) {
-      console.error('Error fetching conversations:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
+      toast.error('Error fetching conversations:' + errorMessage)
     } finally {
       setIsLoadingConversations(false)
     }
@@ -270,7 +277,9 @@ export default function ChatPage() {
         setMessages(data)
       }
     } catch (error) {
-      console.error('Error fetching messages:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
+      toast.error('Error fetching messages:' + errorMessage)
     } finally {
       setIsLoadingConversation(false)
     }
@@ -291,7 +300,9 @@ export default function ChatPage() {
         setSearchResults(data)
       }
     } catch (error) {
-      console.error('Error searching users:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
+      toast.error('Error searching users:' + errorMessage)
     }
   }
 
@@ -320,13 +331,15 @@ export default function ChatPage() {
         // Join the conversation room immediately
         if (socket && isAuthenticated) {
           socket.emit('join:conversation', conversation.id)
-          console.log('Joined new conversation room:', conversation.id)
+          // console.log('Joined new conversation room:', conversation.id)
         }
 
         focusMessageInput() // Focus input when starting new conversation
       }
     } catch (error) {
-      console.error('Error starting conversation:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
+      toast.error('Error starting conversation:' + errorMessage)
     } finally {
       setIsLoadingConversation(false)
     }
@@ -385,12 +398,14 @@ export default function ChatPage() {
       } else {
         // If sending failed, restore the message
         setNewMessage(messageContent)
-        console.error('Failed to send message')
+        toast.error('Failed to send message')
       }
     } catch (error) {
       // If sending failed, restore the message
       setNewMessage(messageContent)
-      console.error('Error sending message:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
+      toast.error('Error sending message:' + errorMessage)
     } finally {
       setIsSending(false)
     }
@@ -414,7 +429,7 @@ export default function ChatPage() {
     // Ensure we're in the conversation room
     if (socket && isAuthenticated) {
       socket.emit('join:conversation', conversation.id)
-      console.log('Joined conversation room:', conversation.id)
+      // console.log('Joined conversation room:', conversation.id)
     }
   }
 

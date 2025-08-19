@@ -1,6 +1,7 @@
 import { useAuth } from '@/contexts/auth-context'
 import { useEffect, useRef, useState } from 'react'
 import { io, Socket } from 'socket.io-client'
+import { toast } from 'sonner'
 
 interface UseSocketConnectionReturn {
   isConnected: boolean
@@ -68,7 +69,7 @@ export function useSocketConnection(): UseSocketConnectionReturn {
 
     // Connection events
     socket.on('connect', () => {
-      console.log('WebSocket connected')
+      // console.log('WebSocket connected')
       setIsConnected(true)
 
       // If we have a token, verify it manually
@@ -79,21 +80,23 @@ export function useSocketConnection(): UseSocketConnectionReturn {
     })
 
     socket.on('disconnect', () => {
-      console.log('WebSocket disconnected')
+      // console.log('WebSocket disconnected')
       setIsConnected(false)
       setIsAuthenticated(false)
       setUserData(null)
     })
 
     socket.on('connect_error', (error) => {
-      console.error('WebSocket connection error:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
+      toast.error('WebSocket connection error:' + errorMessage)
       setIsConnected(false)
       setIsAuthenticated(false)
       setUserData(null)
     })
 
-    socket.on('reconnect', (attemptNumber) => {
-      console.log('WebSocket reconnected after', attemptNumber, 'attempts')
+    socket.on('reconnect', (_attemptNumber) => {
+      // console.log('WebSocket reconnected after', attemptNumber, 'attempts')
       setIsConnected(true)
 
       // Re-verify authentication after reconnection
@@ -104,7 +107,9 @@ export function useSocketConnection(): UseSocketConnectionReturn {
     })
 
     socket.on('reconnect_error', (error) => {
-      console.error('WebSocket reconnection error:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
+      toast.error('WebSocket reconnection error:' + errorMessage)
       setIsConnected(false)
       setIsAuthenticated(false)
       setUserData(null)
@@ -112,13 +117,15 @@ export function useSocketConnection(): UseSocketConnectionReturn {
 
     // Authentication events
     socket.on('auth:success', (userData) => {
-      console.log('WebSocket authentication successful:', userData)
+      // console.log('WebSocket authentication successful:', userData)
       setIsAuthenticated(true)
       setUserData(userData)
     })
 
     socket.on('auth:error', (error) => {
-      console.error('WebSocket authentication error:', error)
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error'
+      toast.error('WebSocket authentication error:' + errorMessage)
       setIsAuthenticated(false)
       setUserData(null)
     })

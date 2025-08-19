@@ -68,10 +68,16 @@ export async function POST(request: NextRequest) {
     return response
   } catch (error) {
     if (error instanceof Error) {
-      return NextResponse.json({ error: error.message }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Invalid request', message: error.message },
+        { status: 400 },
+      )
     }
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 },
     )
   }

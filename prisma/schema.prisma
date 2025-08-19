@@ -1,8 +1,6 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// This file is the main Prisma schema file.
+// For production builds, use: prisma generate --no-engine
+// This reduces bundle size by excluding the Prisma engine from the client bundle.
 
 generator client {
   provider = "prisma-client-js"
