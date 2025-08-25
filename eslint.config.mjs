@@ -12,6 +12,7 @@ const compat = new FlatCompat({
 const eslintConfig = [
   ...compat.config({
     extends: ['next/core-web-vitals', 'next/typescript'],
+    ignorePatterns: ['node_modules', 'dist', 'build', 'scripts', 'server.js'],
     rules: {
       'prefer-arrow-callback': ['error'],
       'prefer-const': ['error'],
