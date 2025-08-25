@@ -50,10 +50,55 @@ export default function ChatPage() {
   const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set())
   const [isTyping, setIsTyping] = useState(false)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
 
   // Initialize WebSocket
   const { isConnected, isAuthenticated, userData, socket } =
     useSocketConnection()
+
+  // Create notification sound
+  const playNotificationSound = () => {
+    try {
+      // Create audio context if it doesn't exist
+      if (!audioContextRef.current) {
+        const AudioContextClass =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext })
+            .webkitAudioContext
+        audioContextRef.current = new AudioContextClass()
+      }
+
+      const audioContext = audioContextRef.current
+
+      // Create oscillator for the sound
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+
+      // Connect nodes
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+
+      // Configure sound
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime) // 800Hz tone
+      oscillator.frequency.exponentialRampToValueAtTime(
+        600,
+        audioContext.currentTime + 0.1,
+      ) // Slide down
+
+      // Configure volume
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime) // Start at 30% volume
+      gainNode.gain.exponentialRampToValueAtTime(
+        0.01,
+        audioContext.currentTime + 0.1,
+      ) // Fade out
+
+      // Play sound
+      oscillator.start(audioContext.currentTime)
+      oscillator.stop(audioContext.currentTime + 0.1)
+    } catch (_error) {
+      // Silently handle audio errors
+    }
+  }
 
   // WebSocket event handlers
   useEffect(() => {
@@ -76,35 +121,33 @@ export default function ChatPage() {
       ) {
         setMessages((prev) => [...prev, message])
       }
-
-      // Update conversation list with new message (for all users)
-      setConversations((prev) =>
-        prev.map((conv) => {
-          if (conv.id === message.conversationId) {
-            return {
-              ...conv,
-              messages: [message, ...(conv.messages || [])],
-              updatedAt: message.createdAt,
-            }
-          }
-          return conv
-        }),
-      )
     })
 
     // Listen for conversation updates
     socket.on(
       'conversation:updated',
-      (conversationId: string, lastMessage: ChatMessage) => {
-        // console.log('Conversation updated:', conversationId, lastMessage)
+      (data: { conversationId: string; message: ChatMessage }) => {
+        // Play sound for ALL incoming messages from other users
+        if (data.message.senderId !== user?.id) {
+          playNotificationSound()
+        }
         // Update conversation list with new message
         setConversations((prev) =>
           prev.map((conv) => {
-            if (conv.id === conversationId) {
+            if (conv.id === data.conversationId) {
+              // Add the new message to the conversation
+              const updatedMessages = [data.message, ...(conv.messages || [])]
+              // Sort messages by creation time (newest first)
+              updatedMessages.sort(
+                (a, b) =>
+                  new Date(b.createdAt).getTime() -
+                  new Date(b.createdAt).getTime(),
+              )
+
               return {
                 ...conv,
-                messages: [lastMessage, ...(conv.messages || [])],
-                updatedAt: lastMessage.createdAt,
+                messages: updatedMessages,
+                updatedAt: data.message.createdAt,
               }
             }
             return conv
@@ -193,6 +236,11 @@ export default function ChatPage() {
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current)
       }
+      // Cleanup audio context
+      if (audioContextRef.current) {
+        audioContextRef.current.close()
+        audioContextRef.current = null
+      }
     }
   }, [])
 
@@ -204,10 +252,6 @@ export default function ChatPage() {
         behavior: 'smooth',
       })
     }
-  }
-
-  const focusMessageInput = () => {
-    messageInputRef.current?.focus()
   }
 
   useEffect(() => {
@@ -244,10 +288,28 @@ export default function ChatPage() {
     if (selectedConversation) {
       fetchMessages(selectedConversation.id)
       // Small delay to ensure conversation is loaded before focusing
-      setTimeout(() => focusMessageInput(), 100)
+      setTimeout(() => {
+        if (messageInputRef.current) {
+          messageInputRef.current.focus()
+        }
+      }, 100)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConversation])
+
+  // Keep input focused after messages update
+  useEffect(() => {
+    if (messages.length > 0 && messageInputRef.current) {
+      // Only focus if we're not currently typing (to avoid interrupting user)
+      if (document.activeElement !== messageInputRef.current) {
+        setTimeout(() => {
+          if (messageInputRef.current) {
+            messageInputRef.current.focus()
+          }
+        }, 50)
+      }
+    }
+  }, [messages.length])
 
   const fetchConversations = async () => {
     try {
@@ -255,7 +317,15 @@ export default function ChatPage() {
       const response = await fetch(`/api/conversations?userId=${user?.id}`)
       if (response.ok) {
         const data = await response.json()
-        setConversations(data)
+        // Sort conversations by latest message time (newest first)
+        const sortedConversations = data.sort(
+          (a: Conversation, b: Conversation) => {
+            const aTime = a.messages?.[0]?.createdAt || a.updatedAt
+            const bTime = b.messages?.[0]?.createdAt || b.updatedAt
+            return new Date(bTime).getTime() - new Date(aTime).getTime()
+          },
+        )
+        setConversations(sortedConversations)
       }
     } catch (error) {
       const errorMessage =
@@ -274,7 +344,12 @@ export default function ChatPage() {
       )
       if (response.ok) {
         const data = await response.json()
-        setMessages(data)
+        // Sort messages by creation time (oldest first for display)
+        const sortedMessages = data.sort(
+          (a: ChatMessage, b: ChatMessage) =>
+            new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+        )
+        setMessages(sortedMessages)
       }
     } catch (error) {
       const errorMessage =
@@ -334,7 +409,12 @@ export default function ChatPage() {
           // console.log('Joined new conversation room:', conversation.id)
         }
 
-        focusMessageInput() // Focus input when starting new conversation
+        // Focus input when starting new conversation
+        setTimeout(() => {
+          if (messageInputRef.current) {
+            messageInputRef.current.focus()
+          }
+        }, 100)
       }
     } catch (error) {
       const errorMessage =
@@ -380,21 +460,42 @@ export default function ChatPage() {
         // This message is from the current user, so we add it locally
         setMessages((prev) => [...prev, message])
 
-        // Update conversation list with new message
-        setConversations((prev) =>
-          prev.map((conv) => {
+        // Update conversation list with new message and resort
+        setConversations((prev) => {
+          const updated = prev.map((conv) => {
             if (conv.id === selectedConversation.id) {
+              // Add the new message to the conversation
+              const updatedMessages = [message, ...(conv.messages || [])]
+              // Sort messages by creation time (newest first)
+              updatedMessages.sort(
+                (a, b) =>
+                  new Date(b.createdAt).getTime() -
+                  new Date(b.createdAt).getTime(),
+              )
+
               return {
                 ...conv,
-                messages: [message, ...(conv.messages || [])],
+                messages: updatedMessages,
                 updatedAt: message.createdAt,
               }
             }
             return conv
-          }),
-        )
+          })
 
-        focusMessageInput() // Focus input after sending message
+          // Resort conversations by latest message time
+          return updated.sort((a, b) => {
+            const aTime = a.messages?.[0]?.createdAt || a.updatedAt
+            const bTime = b.messages?.[0]?.createdAt || b.updatedAt
+            return new Date(bTime).getTime() - new Date(aTime).getTime()
+          })
+        })
+
+        // Keep focus on input after sending message
+        setTimeout(() => {
+          if (messageInputRef.current) {
+            messageInputRef.current.focus()
+          }
+        }, 0)
       } else {
         // If sending failed, restore the message
         setNewMessage(messageContent)
@@ -575,10 +676,23 @@ export default function ChatPage() {
                     )}
                   </div>
                   {lastMessage && (
-                    <p className="mt-1 truncate text-sm text-gray-600 dark:text-gray-400">
-                      {lastMessage.sender.id === user?.id ? 'You: ' : ''}
-                      {lastMessage.content}
-                    </p>
+                    <div className="mt-1">
+                      <p className="truncate text-sm text-gray-600 dark:text-gray-400">
+                        {lastMessage.sender.id === user?.id ? 'You: ' : ''}
+                        {lastMessage.content}
+                      </p>
+                      <p className="mt-1 text-xs text-gray-400">
+                        {new Date(lastMessage.createdAt).toLocaleDateString(
+                          [],
+                          {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          },
+                        )}
+                      </p>
+                    </div>
                   )}
                 </div>
               )
@@ -714,6 +828,12 @@ export default function ChatPage() {
                   onChange={(e) => {
                     setNewMessage(e.target.value)
                     handleTyping() // Trigger typing indicator
+                  }}
+                  onFocus={() => {
+                    // Ensure input stays focused
+                    if (messageInputRef.current) {
+                      messageInputRef.current.focus()
+                    }
                   }}
                   placeholder={
                     isSending ? 'Sending message...' : 'Type a message...'
