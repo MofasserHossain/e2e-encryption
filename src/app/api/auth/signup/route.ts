@@ -1,4 +1,5 @@
-import { generateToken } from '@/lib/jwt'
+import { setEncryptionKeysInCookies } from '@/lib/cookie-utils'
+import { generatePemKeyPair } from '@/lib/e2e-encryption'
 import { prisma } from '@/lib/prisma'
 import { signupSchema } from '@/lib/validations/auth'
 import bcrypt from 'bcryptjs'
@@ -19,65 +20,63 @@ export async function POST(request: NextRequest) {
     if (existingUser) {
       return NextResponse.json(
         { error: 'User with this email or username already exists' },
-        { status: 400 },
+        { status: 409 },
       )
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Create user
+    // Generate E2E encryption keys
+    const { privateKeyPem, publicKeyPem } = await generatePemKeyPair()
+
+    // Create user in database
     const user = await prisma.user.create({
       data: {
         email,
-        password: hashedPassword,
         name,
         username,
+        password: hashedPassword,
+        publicKey: publicKeyPem,
+        privateKey: privateKeyPem,
       },
       select: {
         id: true,
         email: true,
         name: true,
         username: true,
+        publicKey: true,
+        privateKey: true,
         createdAt: true,
       },
     })
 
-    // Generate JWT token
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      username: user.username,
-    })
-
-    // Create response with user data
+    // Create response
     const response = NextResponse.json(
-      { message: 'User created successfully', user },
+      {
+        message: 'User registered successfully',
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          username: user.username,
+          publicKey: user.publicKey,
+        },
+      },
       { status: 201 },
     )
 
-    // Set JWT token in HTTP-only cookie
-    response.cookies.set('auth-token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60, // 7 days
-      path: '/', // Ensure cookie is accessible from all paths
+    // Set encryption keys in cookies
+    setEncryptionKeysInCookies(response, {
+      privateKey: user.privateKey,
+      publicKey: user.publicKey,
     })
 
     return response
   } catch (error) {
-    if (error instanceof Error) {
-      return NextResponse.json(
-        { error: 'Invalid request', message: error.message },
-        { status: 400 },
-      )
-    }
+    // console.log('Registration error:', error)
     return NextResponse.json(
-      {
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
-      },
+      { error: 'Internal server error' + error },
       { status: 500 },
     )
   }

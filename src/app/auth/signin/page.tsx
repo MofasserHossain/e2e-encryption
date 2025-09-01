@@ -19,6 +19,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/contexts/auth-context'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { Shield } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -66,8 +67,11 @@ export default function SigninPage() {
 
       const result = await response.json()
 
+      // console.log('🚀 Login result:', result)
+
       // Login the user and wait for it to complete
       await login(result.user)
+      // console.log('🚀 Login user:', result.user)
 
       // Only redirect after successful login
       router.push('/chat')
@@ -82,11 +86,19 @@ export default function SigninPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-gray-900">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
+          <div className="mb-4 flex items-center justify-center">
+            <div className="flex items-center space-x-2 rounded-full bg-green-100 px-3 py-1 dark:bg-green-900/20">
+              <Shield className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <span className="text-sm font-medium text-green-700 dark:text-green-300">
+                E2E Encrypted
+              </span>
+            </div>
+          </div>
           <CardTitle className="text-center text-2xl font-bold">
             Welcome back
           </CardTitle>
           <CardDescription className="text-center">
-            Enter your credentials to sign in
+            Enter your credentials to access your encrypted chat
           </CardDescription>
         </CardHeader>
         <CardContent>
