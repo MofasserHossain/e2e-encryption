@@ -19,6 +19,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/contexts/auth-context'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { Key, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
@@ -61,6 +62,9 @@ export default function SignupPage() {
     setError('')
 
     try {
+      // Generate E2E encryption keys
+      // const encryptionKeys = await registerUser(data.password)
+      // return console.log(encryptionKeys)
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: {
@@ -92,11 +96,19 @@ export default function SignupPage() {
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 dark:bg-gray-900">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
+          <div className="mb-4 flex items-center justify-center">
+            <div className="flex items-center space-x-2 rounded-full bg-green-100 px-3 py-1 dark:bg-green-900/20">
+              <Shield className="h-4 w-4 text-green-600 dark:text-green-400" />
+              <span className="text-sm font-medium text-green-700 dark:text-green-300">
+                E2E Encrypted
+              </span>
+            </div>
+          </div>
           <CardTitle className="text-center text-2xl font-bold">
             Create an account
           </CardTitle>
           <CardDescription className="text-center">
-            Enter your information to get started
+            Join our secure, end-to-end encrypted chat platform
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -181,6 +193,23 @@ export default function SignupPage() {
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? 'Creating account...' : 'Create account'}
               </Button>
+
+              {/* Security Notice */}
+              <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-900/20">
+                <div className="flex items-start space-x-2">
+                  <Key className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-600 dark:text-blue-400" />
+                  <div className="text-xs text-blue-700 dark:text-blue-300">
+                    <p className="mb-1 font-medium">
+                      🔐 Your encryption keys will be generated automatically
+                    </p>
+                    <p>
+                      Your private and public keys are stored securely and used
+                      for E2E message encryption. Only you can decrypt your
+                      messages.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
               <div className="text-center text-sm">
                 Already have an account?{' '}

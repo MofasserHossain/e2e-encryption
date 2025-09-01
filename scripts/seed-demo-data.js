@@ -1,5 +1,6 @@
 const { PrismaClient } = require('@prisma/client')
 const bcrypt = require('bcryptjs')
+const crypto = require('crypto')
 
 const prisma = new PrismaClient()
 
@@ -31,6 +32,12 @@ async function main() {
   for (const userData of users) {
     const hashedPassword = await bcrypt.hash(userData.password, 12)
 
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', {
+      namedCurve: 'prime256v1', // P-256
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    })
+
     const user = await prisma.user.upsert({
       where: { email: userData.email },
       update: {},
@@ -39,6 +46,8 @@ async function main() {
         name: userData.name,
         username: userData.username,
         password: hashedPassword,
+        publicKey,
+        privateKey,
       },
     })
 
@@ -54,42 +63,14 @@ async function main() {
   })
 
   if (alice && bob) {
-    const conversation = await prisma.conversation.create({
+    await prisma.conversation.create({
       data: {
         participants: {
           create: [{ userId: alice.id }, { userId: bob.id }],
         },
       },
     })
-
-    // Add some demo messages
-    const messages = [
-      { content: 'Hey Bob! How are you doing?', senderId: alice.id },
-      {
-        content: "Hi Alice! I'm doing great, thanks for asking!",
-        senderId: bob.id,
-      },
-      {
-        content: "That's wonderful! Want to grab coffee later?",
-        senderId: alice.id,
-      },
-      {
-        content: 'Absolutely! That sounds great. 3 PM at the usual place?',
-        senderId: bob.id,
-      },
-    ]
-
-    for (const messageData of messages) {
-      await prisma.message.create({
-        data: {
-          content: messageData.content,
-          senderId: messageData.senderId,
-          conversationId: conversation.id,
-        },
-      })
-    }
-
-    console.log('✅ Created demo conversation with messages')
+    console.log('✅ Created demo conversation (no messages)')
   }
 
   console.log('🎉 Demo data seeding completed!')

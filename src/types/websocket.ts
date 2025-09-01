@@ -4,6 +4,7 @@ export interface ChatMessage {
   senderId: string
   conversationId: string
   createdAt: string
+  nonce?: string
   sender: {
     id: string
     name: string

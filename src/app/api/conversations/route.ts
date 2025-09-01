@@ -1,3 +1,5 @@
+import { getEncryptionKeysFromCookies } from '@/lib/cookie-utils'
+import { decryptMessage } from '@/lib/e2e-encryption'
 import { verifyToken } from '@/lib/jwt'
 import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
@@ -26,6 +28,15 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Get user's encryption keys from cookies
+    const userKeys = getEncryptionKeysFromCookies(request)
+    if (!userKeys.privateKey) {
+      return NextResponse.json(
+        { error: 'Encryption keys not found' },
+        { status: 401 },
+      )
+    }
+
     // Get conversations where the user is a participant
     const conversations = await prisma.conversation.findMany({
       where: {
@@ -43,6 +54,7 @@ export async function GET(request: NextRequest) {
                 id: true,
                 name: true,
                 username: true,
+                publicKey: true,
               },
             },
           },
@@ -58,6 +70,7 @@ export async function GET(request: NextRequest) {
                 id: true,
                 name: true,
                 username: true,
+                publicKey: true,
               },
             },
           },
@@ -68,7 +81,84 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    return NextResponse.json(conversations)
+    // Decrypt the last message in each conversation
+    const conversationsWithDecryptedMessages = await Promise.all(
+      conversations.map(async (conversation) => {
+        if (conversation.messages.length === 0) {
+          return conversation
+        }
+
+        const lastMessage = conversation.messages[0] // First message due to desc order
+
+        // Skip decryption if message is missing required fields
+        if (!lastMessage.nonce) {
+          return {
+            ...conversation,
+            messages: [
+              {
+                ...lastMessage,
+                content: 'Message missing encryption data',
+              },
+            ],
+          }
+        }
+
+        try {
+          let decryptedContent: string
+
+          if (lastMessage.senderId === userId) {
+            // Decrypt own message (sender decrypts their own message)
+            // Find the OTHER participant's public key
+            const otherParticipant = conversation.participants.find(
+              (p) => p.user.id !== userId,
+            )
+
+            if (otherParticipant?.user.publicKey) {
+              decryptedContent = await decryptMessage(
+                lastMessage.content,
+                lastMessage.nonce as string,
+                userKeys.privateKey as string,
+                otherParticipant.user.publicKey,
+              )
+            } else {
+              decryptedContent =
+                'Failed to decrypt: missing receiver public key'
+            }
+          } else {
+            // Decrypt sender's message
+            decryptedContent = await decryptMessage(
+              lastMessage.content,
+              lastMessage.nonce as string,
+              userKeys.privateKey as string,
+              lastMessage.sender.publicKey!,
+            )
+          }
+
+          return {
+            ...conversation,
+            messages: [
+              {
+                ...lastMessage,
+                content: decryptedContent || 'Failed to decrypt message',
+              },
+            ],
+          }
+        } catch (_error) {
+          // If decryption fails, return conversation with error message
+          return {
+            ...conversation,
+            messages: [
+              {
+                ...lastMessage,
+                content: 'Failed to decrypt message',
+              },
+            ],
+          }
+        }
+      }),
+    )
+
+    return NextResponse.json(conversationsWithDecryptedMessages)
   } catch (error) {
     // console.error('Error fetching conversations:', error)
     return NextResponse.json(

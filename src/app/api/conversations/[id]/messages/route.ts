@@ -1,4 +1,5 @@
-import { verifyToken } from '@/lib/jwt'
+import { getEncryptionKeysFromCookies } from '@/lib/cookie-utils'
+import { decryptMessage, encryptMessage } from '@/lib/e2e-encryption'
 import { prisma } from '@/lib/prisma'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -19,17 +20,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const token = request.cookies.get('auth-token')?.value
-
-    if (!token) {
-      return NextResponse.json({ error: 'No token provided' }, { status: 401 })
-    }
-
-    const payload = verifyToken(token)
-    if (!payload) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-    }
-
+    const { id: conversationId } = await params
     const { searchParams } = new URL(request.url)
     const userId = searchParams.get('userId')
 
@@ -40,17 +31,15 @@ export async function GET(
       )
     }
 
-    const { id: conversationId } = await params
-
-    // Check if user is a participant in this conversation
-    const participant = await prisma.userConversation.findFirst({
-      where: {
-        userId: userId,
-        conversationId: conversationId,
+    // Get all participants for this conversation in ONE query
+    const participants = await prisma.userConversation.findMany({
+      where: { conversationId },
+      include: {
+        user: { select: { id: true, publicKey: true } },
       },
     })
 
-    if (!participant) {
+    if (!participants.find((p) => p.user.id === userId)) {
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
@@ -65,6 +54,7 @@ export async function GET(
             id: true,
             name: true,
             username: true,
+            publicKey: true,
           },
         },
       },
@@ -73,7 +63,67 @@ export async function GET(
       },
     })
 
-    return NextResponse.json(messages)
+    // Get user's encryption keys from cookies
+    const userKeys = getEncryptionKeysFromCookies(request)
+
+    if (!userKeys.privateKey) {
+      return NextResponse.json(
+        { error: 'Encryption keys not found' },
+        { status: 401 },
+      )
+    }
+
+    // Decrypt messages
+    const decryptedMessages = await Promise.all(
+      messages.map(async (message) => {
+        try {
+          let decryptedContent: string
+
+          if (message.senderId === userId) {
+            // Decrypt own message (sender decrypts their own message)
+            // Find the OTHER participant's public key from our map
+            const otherParticipantPublicKey = participants.find(
+              (p) => p.user.id !== userId,
+            )?.user.publicKey
+
+            if (otherParticipantPublicKey) {
+              decryptedContent = await decryptMessage(
+                message.content,
+                message.nonce,
+                userKeys.privateKey!,
+                otherParticipantPublicKey, // Use OTHER person's public key
+              )
+            } else {
+              decryptedContent =
+                'Failed to decrypt: missing receiver public key'
+            }
+          } else {
+            // Decrypt sender's message
+            decryptedContent = await decryptMessage(
+              message.content,
+              message.nonce as string,
+              userKeys.privateKey!,
+              message.sender.publicKey!,
+            )
+          }
+
+          return {
+            ...message,
+            content: decryptedContent || 'Failed to decrypt message',
+            createdAt: message.createdAt.toISOString(),
+          }
+        } catch (_error) {
+          // Failed to decrypt message
+          return {
+            ...message,
+            content: 'Failed to decrypt message',
+            createdAt: message.createdAt.toISOString(),
+          }
+        }
+      }),
+    )
+
+    return NextResponse.json(decryptedMessages)
   } catch (error) {
     return NextResponse.json(
       {
@@ -85,34 +135,22 @@ export async function GET(
   }
 }
 
-// POST /api/conversations/[id]/messages - Send a new message
+// POST /api/conversations/[id]/messages - Send a new encrypted message
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const token = request.cookies.get('auth-token')?.value
-
-    if (!token) {
-      return NextResponse.json({ error: 'No token provided' }, { status: 401 })
-    }
-
-    const payload = verifyToken(token)
-    if (!payload) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-    }
-
+    const { id: conversationId } = await params
     const body = await request.json()
-    const { content, senderId } = body
+    const { content, senderId, receiverPublicKey } = body
 
-    if (!content || !senderId) {
+    if (!content || !senderId || !receiverPublicKey) {
       return NextResponse.json(
-        { error: 'Content and sender ID are required' },
+        { error: 'Content, sender ID, and receiver public key are required' },
         { status: 400 },
       )
     }
-
-    const { id: conversationId } = await params
 
     // Check if user is a participant in this conversation
     const participant = await prisma.userConversation.findFirst({
@@ -126,10 +164,28 @@ export async function POST(
       return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Create the message
+    // Get user's encryption keys from cookies
+    const userKeys = getEncryptionKeysFromCookies(request)
+
+    if (!userKeys.privateKey) {
+      return NextResponse.json(
+        { error: 'Encryption keys not found' },
+        { status: 401 },
+      )
+    }
+
+    // Encrypt the message
+    const { cipher, nonce } = await encryptMessage(
+      userKeys.privateKey,
+      receiverPublicKey,
+      content,
+    )
+
+    // Create the encrypted message
     const message = await prisma.message.create({
       data: {
-        content: content,
+        content: cipher, // Store encrypted content
+        nonce: nonce, // Store nonce for decryption
         senderId: senderId,
         conversationId: conversationId,
       },
@@ -139,10 +195,18 @@ export async function POST(
             id: true,
             name: true,
             username: true,
+            publicKey: true,
           },
         },
       },
     })
+
+    const decryptedMessage = await decryptMessage(
+      message.content,
+      message.nonce,
+      userKeys.privateKey,
+      receiverPublicKey,
+    )
 
     // Update conversation's updatedAt timestamp
     await prisma.conversation.update({
@@ -150,26 +214,24 @@ export async function POST(
       data: { updatedAt: new Date() },
     })
 
-    // Emit WebSocket events using global io instance
+    // Notify all participants about the new message
     if (global.io) {
-      const chatMessage = {
-        ...message,
-        createdAt: message.createdAt.toISOString(),
-      }
-
-      // Emit the new message to OTHER users in the conversation (excluding sender)
-      // This ensures the sender doesn't receive their own message via WebSocket
       global.io
         .to(`conversation:${conversationId}`)
-        .emit('message:received', chatMessage)
+        .emit('message:received', message)
 
-      // Emit conversation update to refresh conversation list for a  ll participants
       global.io
         .to(`conversation:${conversationId}`)
-        .emit('conversation:updated', { conversationId, message: chatMessage })
+        .emit('conversation:updated', { conversationId, message })
     }
 
-    return NextResponse.json(message, { status: 201 })
+    return NextResponse.json(
+      {
+        ...message,
+        content: decryptedMessage,
+      },
+      { status: 201 },
+    )
   } catch (error) {
     return NextResponse.json(
       {
